@@ -209,7 +209,8 @@ async function fetchOrders(initial) {
     Object.keys(local).forEach(id => { if (!orders.some(o => o.id === id)) delete local[id]; });
     connOk = true; lastOk = Date.now();
     render(fresh.map(o => o.id));
-    if (!first && fresh.length && sound) beep();
+    if (!first && fresh.length && sound) beep(fresh.length);
+    else if (!first && fresh.length && navigator.vibrate) navigator.vibrate([300, 120, 300]);
     first = false;
   } catch (e) {
     connOk = false; renderStatus();
@@ -274,16 +275,32 @@ function renderStatus() {
 }
 
 let ac = null;
-function beep() {
+function tone(freq, at, dur, gain) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, ac.currentTime + at);
+  g.gain.exponentialRampToValueAtTime(gain, ac.currentTime + at + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + at + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(ac.currentTime + at); o.stop(ac.currentTime + at + dur + 0.02);
+}
+/** 新規オーダー：大きめの3連ブザー＋長めの振動 */
+function beep(n) {
+  if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 450]);
   try {
     ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.type = 'sine'; o.frequency.value = 880;
-    g.gain.setValueAtTime(0.0001, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.2, ac.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.35);
-    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.36);
+    if (ac.state === 'suspended') ac.resume();
+    [0, 0.34, 0.68].forEach(t => { tone(988, t, 0.24, 0.85); tone(1319, t, 0.24, 0.5); });
   } catch (e) {}
+  if (n) flashTitle(n);
+}
+let flashTimer = null;
+function flashTitle(n) {
+  clearTimeout(flashTimer);
+  const h = $('#head');
+  h.textContent = '新しいオーダー ' + n + '件';
+  h.style.color = 'var(--accent)';
+  flashTimer = setTimeout(() => { h.style.color = ''; render(); }, 4000);
 }
 
 // ---------- イベント ----------
@@ -294,7 +311,7 @@ document.addEventListener('click', e => {
 $('#soundBtn').addEventListener('click', () => {
   sound = !sound; localStorage.setItem(K.sound, sound ? '1' : '0');
   $('#soundBtn').setAttribute('aria-pressed', sound);
-  if (sound) beep();   // iOSのため、ユーザー操作の中で一度鳴らして音声を有効化する
+  if (sound) beep(0);  // iOSのため、ユーザー操作の中で一度鳴らして音声を有効化する
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { fetchOrders(false); flush(); } });
 
