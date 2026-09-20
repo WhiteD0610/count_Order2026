@@ -89,6 +89,9 @@ body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; 
 .item .qt { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ctime { font-size: 13px; color: var(--label-2); }
 
+.warn-bar { max-width: 1100px; margin: var(--sp-3) auto 0; padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-lg); background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red);
+  font-size: 22px; font-weight: 700; letter-spacing: -0.01em; text-align: center; }
 .empty { margin: 64px var(--sp-6); text-align: center; color: var(--label-2); font-size: 17px; }
 .empty .ic { width: 44px; height: 44px; margin: 0 auto var(--sp-3); color: var(--label-3); }
 
@@ -122,6 +125,7 @@ body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; 
     </div>
   </header>
 
+  <div class="warn-bar" id="warnBar" hidden></div>
   <div class="totals" id="totals"></div>
   <div class="totals" id="surplus"></div>
   <div class="cards" id="cards"></div>
@@ -148,7 +152,7 @@ const pad = n => String(n).padStart(2, '0');
 const hm = ts => { const d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 
 let sound = localStorage.getItem(K.sound) === '1';
-let cfg = null, orders = [], seen = new Set(), surplus = {};
+let cfg = null, orders = [], seen = new Set(), surplus = {}, stock = null;
 let queue = load(K.queue, []);          // 未送信の調理完了イベント
 let local = {};                         // 送信待ちの状態（id -> status）
 let connOk = null, lastOk = 0, first = true;
@@ -191,6 +195,7 @@ async function flush() {
     const sent = new Set(batch.map(e => e.eid));
     queue = queue.filter(e => !sent.has(e.eid));
     store(K.queue, queue);
+    if (j.stock) stock = j.stock;
     connOk = true;
     fetchOrders(false);
   } catch (e) {
@@ -210,6 +215,7 @@ async function fetchOrders(initial) {
     if (!j.ok) throw new Error(j.error);
     cfg = j.config;
     surplus = j.surplus || {};
+    if (j.stock) stock = j.stock;
     const next = j.orders.map(o => ({
       id: o[0], ticket: o[1], ts: o[2],
       items: JSON.parse(o[3] || '[]').map(it => ({ productId: it[0], name: it[1], price: it[2], qty: it[3] })),
@@ -251,6 +257,11 @@ function render(freshIds) {
   const total = cooking.reduce((a, o) => a + o.items.reduce((b, i) =>
     b + Math.max(0, i.qty - ((alloc[o.id] || {})[i.productId] || 0)), 0), 0);
   $('#head').textContent = '調理待ち ' + cooking.length + '件';
+  const wb = $('#warnBar');
+  if (stock && stock.warn) {
+    wb.hidden = false;
+    wb.textContent = 'チュロス在庫 残り' + stock.leftPieces + '本（警告ライン ' + stock.warnAt + '本）';
+  } else wb.hidden = true;
   renderStatus();
 
   const byP = {};
