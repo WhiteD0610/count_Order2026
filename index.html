@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="キッチン">
+<title>チュロス キッチン</title>
+<style>
+:root {
+  --bg: #F2F2F7; --surface: #FFFFFF; --surface-2: #F2F2F7;
+  --separator: rgba(60,60,67,0.20); --fill: rgba(120,120,128,0.12);
+  --label: #000000; --label-2: rgba(60,60,67,0.60); --label-3: rgba(60,60,67,0.30);
+  --accent: #007AFF; --red: #FF3B30; --green: #34C759; --orange: #FF9500;
+  --r-md: 10px; --r-lg: 14px; --r-xl: 22px;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px; --sp-8: 32px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08);
+  --ease: cubic-bezier(0.32, 0.72, 0, 1); --dur: 280ms;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+          "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --surface: #1C1C1E; --surface-2: #2C2C2E;
+    --separator: rgba(84,84,88,0.65); --fill: rgba(120,120,128,0.24);
+    --label: #FFFFFF; --label-2: rgba(235,235,245,0.60); --label-3: rgba(235,235,245,0.30);
+    --accent: #0A84FF; --red: #FF453A; --green: #30D158; --orange: #FF9F0A;
+    --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.5);
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; color: var(--label);
+  background: var(--bg); -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none;
+  padding-bottom: var(--sp-8); }
+.ic { width: 20px; height: 20px; flex: none; display: block; }
+
+.nav { position: sticky; top: 0; z-index: 10; padding-top: env(safe-area-inset-top);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
+.nav-in { padding: var(--sp-3) var(--sp-4); max-width: 1100px; margin: 0 auto; }
+.nav-top { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-3); }
+.nav h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.nav .sub { font-size: 13px; color: var(--label-2); margin-bottom: 2px; }
+.tools { display: flex; align-items: center; gap: 2px; }
+.status { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 var(--sp-3);
+  border-radius: 16px; background: var(--fill); font-size: 13px; font-weight: 590; color: var(--label-2); white-space: nowrap; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--label-3); }
+.status.ok i { background: var(--green); }
+.status.err i { background: var(--red); }
+.icon-btn { width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: none;
+  color: var(--label-2); cursor: pointer; }
+.icon-btn[aria-pressed="true"] { color: var(--accent); }
+.icon-btn:active { opacity: 0.4; }
+
+/* 作る個数 */
+.totals { max-width: 1100px; margin: 0 auto; padding: var(--sp-3) var(--sp-4) 0; display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.tchip { display: flex; align-items: baseline; gap: var(--sp-2); background: var(--surface); border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3); font-size: 15px; }
+.tchip b { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tchip .dot { width: 10px; height: 10px; border-radius: 50%; align-self: center; }
+.tchip.all { background: var(--fill); }
+
+/* 注文カード */
+.cards { max-width: 1100px; margin: 0 auto; padding: var(--sp-3) var(--sp-4) 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--sp-3); }
+.card { background: var(--surface); border-radius: var(--r-lg); padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.card.oldest { box-shadow: inset 0 0 0 2px var(--accent); }
+.card.new { animation: pop var(--dur) var(--ease); }
+@keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.chead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+.no { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.no small { font-size: 12px; font-weight: 590; color: var(--label-2); letter-spacing: 0; margin-left: 6px; }
+.age { font-size: 15px; color: var(--label-2); font-variant-numeric: tabular-nums; }
+.age.warn { color: var(--orange); font-weight: 590; }
+.age.late { color: var(--red); font-weight: 590; }
+.items { display: grid; gap: var(--sp-2); }
+.item { display: flex; align-items: center; gap: var(--sp-2); font-size: 17px; }
+.item .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.item .nm { flex: 1; min-width: 0; }
+.item .qt { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ctime { font-size: 13px; color: var(--label-2); }
+
+.empty { margin: 64px var(--sp-6); text-align: center; color: var(--label-2); font-size: 17px; }
+.empty .ic { width: 44px; height: 44px; margin: 0 auto var(--sp-3); color: var(--label-3); }
+
+.btn { min-height: 48px; padding: 0 var(--sp-4); border: 0; border-radius: var(--r-md); font: inherit; font-weight: 590;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease); }
+.btn:active { transform: scale(0.96); opacity: 0.85; }
+.btn-filled { background: var(--accent); color: #fff; }
+.btn.block { width: 100%; }
+
+.login { max-width: 400px; margin: 18vh auto 0; padding: 0 var(--sp-4); }
+.login h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 var(--sp-2); }
+.login p { color: var(--label-2); font-size: 15px; margin: 0 0 var(--sp-6); }
+.login .field { width: 100%; min-height: 48px; padding: var(--sp-2) var(--sp-4); border: 0; border-radius: var(--r-md);
+  background: var(--surface); font: inherit; color: var(--label); margin-bottom: var(--sp-3); }
+.login .field:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.err-t { color: var(--red); font-size: 13px; min-height: 20px; margin: 0 var(--sp-1) var(--sp-3); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<section class="login" id="loginView" hidden>
+  <h1>キッチン</h1>
+  <p>スタッフ用パスワードを入力してください。一度入れると、この端末では次回から入力不要です。</p>
+  <input class="field" id="pass" type="password" placeholder="パスワード" autocomplete="current-password">
+  <div class="err-t" id="loginErr"></div>
+  <button class="btn btn-filled block" id="loginBtn">開始</button>
+</section>
+
+<div id="appView" hidden>
+  <header class="nav">
+    <div class="nav-in">
+      <div class="nav-top">
+        <div>
+          <div class="sub" id="sub">更新中</div>
+          <h1 id="head">オーダー 0件</h1>
+        </div>
+        <div class="tools">
+          <div class="status" id="status"><i></i><span>確認中</span></div>
+          <button class="icon-btn" id="soundBtn" aria-pressed="false" aria-label="新着音">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10a5 5 0 0 1 10 0v5l1.5 2.5h-13L7 15z"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/></svg>
+          </button>
+          <button class="icon-btn" id="lockBtn" aria-label="ロック">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="totals" id="totals"></div>
+  <div class="cards" id="cards"></div>
+  <div class="empty" id="empty" hidden>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,13 9,18 20,6"/></svg>
+    未調理のオーダーはありません
+  </div>
+</div>
+
+<script>
+// ===== ここにGASのWebアプリURL（/exec で終わるもの）を貼る =====
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxPALiGXxYTYIFeYSu-rxp0tUIAB3Cdlr367EIkegSQUBscC3j20GNnxwiaiwWgaEgb/exec';
+// ================================================================
+
+const K = { key: 'churro_staff_key', sound: 'churro_kitchen_sound' };
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const hm = ts => { const d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+
+let key = localStorage.getItem(K.key) || '';
+let sound = localStorage.getItem(K.sound) === '1';
+let cfg = null, orders = [], seen = new Set();
+let connOk = null, lastOk = 0, first = true;
+
+const colorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.color : '#8E8E93'; };
+const nameOf = (pid, fallback) => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.name : fallback; };
+
+// ---------- 取得 ----------
+async function fetchOrders(initial) {
+  if (!GAS_URL || !key) return;
+  try {
+    const r = await fetch(GAS_URL + '?action=orders&key=' + encodeURIComponent(key) + '&t=' + Date.now());
+    const j = await r.json();
+    if (!j.ok) { if (j.error === 'auth') { lock('パスワードが変更されました。入力し直してください。'); return; } throw new Error(j.error); }
+    cfg = j.config;
+    const next = j.orders.map(o => ({
+      id: o[0], ticket: o[1], ts: o[2],
+      items: JSON.parse(o[3] || '[]').map(it => ({ productId: it[0], name: it[1], price: it[2], qty: it[3] }))
+    })).sort((a, b) => a.ts - b.ts);
+    const fresh = next.filter(o => !seen.has(o.id));
+    orders = next;
+    orders.forEach(o => seen.add(o.id));
+    connOk = true; lastOk = Date.now();
+    if (initial) showApp();
+    render(fresh.map(o => o.id));
+    if (!first && fresh.length && sound) beep();
+    first = false;
+  } catch (e) {
+    connOk = false;
+    if (initial) { lock('接続できません。通信環境とURLを確認してください。'); return; }
+    renderStatus();
+  }
+}
+
+// ---------- 表示 ----------
+function render(freshIds) {
+  freshIds = freshIds || [];
+  const total = orders.reduce((a, o) => a + o.items.reduce((b, i) => b + i.qty, 0), 0);
+  $('#head').textContent = 'オーダー ' + orders.length + '件';
+  renderStatus();
+
+  // 作る個数
+  const byP = {};
+  orders.forEach(o => o.items.forEach(i => byP[i.productId] = (byP[i.productId] || 0) + i.qty));
+  const ids = (cfg && cfg.products || []).map(p => p.id).filter(id => byP[id])
+    .concat(Object.keys(byP).filter(id => !(cfg && cfg.products || []).some(p => p.id === id)));
+  $('#totals').innerHTML = total
+    ? `<div class="tchip all"><span>作る個数</span><b>${total}</b><span>個</span></div>` +
+      ids.map(id => `<div class="tchip"><span class="dot" style="background:${esc(colorOf(id))}"></span>
+        <span>${esc(nameOf(id, '不明'))}</span><b>${byP[id]}</b><span>個</span></div>`).join('')
+    : '';
+
+  $('#empty').hidden = !!orders.length;
+  $('#cards').innerHTML = orders.map((o, idx) => `
+    <div class="card ${idx === 0 ? 'oldest' : ''} ${freshIds.includes(o.id) ? 'new' : ''}">
+      <div class="chead">
+        <div class="no">${o.ticket}<small>整理券</small></div>
+        <div class="age" data-ts="${o.ts}"></div>
+      </div>
+      <div class="items">${o.items.map(i => `
+        <div class="item"><span class="dot" style="background:${esc(colorOf(i.productId))}"></span>
+          <span class="nm">${esc(nameOf(i.productId, i.name))}</span><span class="qt">${i.qty}</span></div>`).join('')}</div>
+      <div class="ctime">${hm(o.ts)} 受付</div>
+    </div>`).join('');
+  tickAges();
+}
+
+function tickAges() {
+  document.querySelectorAll('.age').forEach(el => {
+    const m = Math.floor((Date.now() - Number(el.dataset.ts)) / 60000);
+    el.textContent = m < 1 ? 'たった今' : m + '分経過';
+    el.className = 'age' + (m >= 10 ? ' late' : m >= 5 ? ' warn' : '');
+  });
+}
+
+function renderStatus() {
+  const el = $('#status'), t = el.querySelector('span');
+  el.className = 'status ' + (connOk === true ? 'ok' : connOk === false ? 'err' : '');
+  t.textContent = connOk === false ? '接続エラー' : '自動更新中';
+  $('#sub').textContent = lastOk ? '最終更新 ' + hm(lastOk) + ':' + pad(new Date(lastOk).getSeconds()) : '更新中';
+}
+
+let ac = null;
+function beep() {
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.2, ac.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.35);
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.36);
+  } catch (e) {}
+}
+
+// ---------- 認証 ----------
+async function login() {
+  const v = $('#pass').value.trim();
+  if (!v) return;
+  if (!GAS_URL) { $('#loginErr').textContent = 'kitchen.html 内の GAS_URL を設定してください'; return; }
+  $('#loginErr').textContent = '確認中…';
+  try {
+    const r = await fetch(GAS_URL + '?action=orders&key=' + encodeURIComponent(v) + '&t=' + Date.now());
+    const j = await r.json();
+    if (!j.ok) { $('#loginErr').textContent = j.error === 'auth' ? 'パスワードが違います' : String(j.error); return; }
+    key = v; localStorage.setItem(K.key, key);
+    $('#pass').value = ''; $('#loginErr').textContent = '';
+    first = true; fetchOrders(true);
+  } catch (e) {
+    $('#loginErr').textContent = '接続できません。通信環境を確認してください。';
+  }
+}
+function showApp() { $('#loginView').hidden = true; $('#appView').hidden = false; }
+function lock(msg) {
+  key = ''; localStorage.removeItem(K.key);
+  $('#appView').hidden = true; $('#loginView').hidden = false;
+  $('#loginErr').textContent = msg || '';
+}
+
+// ---------- イベント ----------
+$('#loginBtn').addEventListener('click', login);
+$('#pass').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+$('#lockBtn').addEventListener('click', () => lock(''));
+$('#soundBtn').addEventListener('click', () => {
+  sound = !sound; localStorage.setItem(K.sound, sound ? '1' : '0');
+  $('#soundBtn').setAttribute('aria-pressed', sound);
+  if (sound) beep();   // iOSのため、ユーザー操作の中で一度鳴らして音声を有効化する
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden && key) fetchOrders(false); });
+
+$('#soundBtn').setAttribute('aria-pressed', sound);
+if (key) { fetchOrders(true); } else { $('#loginView').hidden = false; }
+setInterval(() => { if (key && !document.hidden) fetchOrders(false); }, 3000);
+setInterval(tickAges, 10000);
+</script>
+</body>
+</html>
