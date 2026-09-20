@@ -59,6 +59,9 @@ body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; 
 .tchip b { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .tchip .dot { width: 10px; height: 10px; border-radius: 50%; align-self: center; }
 .tchip.all { background: var(--fill); }
+.tchip.sp { background: color-mix(in srgb, var(--orange) 16%, var(--surface)); }
+.stitle { font-size: 13px; color: var(--label-2); align-self: center; margin-right: var(--sp-1); }
+.stock { font-size: 12px; color: var(--orange); font-weight: 590; }
 
 /* 注文カード */
 .cards { max-width: 1100px; margin: 0 auto; padding: var(--sp-3) var(--sp-4) 0;
@@ -120,6 +123,7 @@ body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; 
   </header>
 
   <div class="totals" id="totals"></div>
+  <div class="totals" id="surplus"></div>
   <div class="cards" id="cards"></div>
   <div class="sec-head" id="readyHead" hidden>準備完了（お渡し待ち）</div>
   <div class="cards" id="readyCards"></div>
@@ -144,7 +148,7 @@ const pad = n => String(n).padStart(2, '0');
 const hm = ts => { const d = new Date(ts); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
 
 let sound = localStorage.getItem(K.sound) === '1';
-let cfg = null, orders = [], seen = new Set();
+let cfg = null, orders = [], seen = new Set(), surplus = {};
 let queue = load(K.queue, []);          // 未送信の調理完了イベント
 let local = {};                         // 送信待ちの状態（id -> status）
 let connOk = null, lastOk = 0, first = true;
@@ -157,9 +161,16 @@ const statusOf = o => local[o.id] || o.status;
 function mark(id, ready) {
   const o = orders.find(x => x.id === id);
   if (!o) return;
+  let use = null;
+  if (ready) {                                     // 充当した余剰在庫を消費する
+    const { alloc } = allocate(orders.filter(x => statusOf(x) === 'waiting'));
+    const a = alloc[id] || {};
+    use = Object.keys(a).map(pid => ({ productId: pid, qty: a[pid] }));
+    Object.keys(a).forEach(pid => { surplus[pid] = Math.max(0, (surplus[pid] || 0) - a[pid]); });
+  }
   local[id] = ready ? 'ready' : 'waiting';
   queue = queue.filter(e => e.id !== id);
-  queue.push({ eid: uid(), type: ready ? 'ready' : 'unready', id, ts: Date.now() });
+  queue.push({ eid: uid(), type: ready ? 'ready' : 'unready', id, ts: Date.now(), use });
   store(K.queue, queue);
   render();
   flush();
@@ -198,6 +209,7 @@ async function fetchOrders(initial) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
     cfg = j.config;
+    surplus = j.surplus || {};
     const next = j.orders.map(o => ({
       id: o[0], ticket: o[1], ts: o[2],
       items: JSON.parse(o[3] || '[]').map(it => ({ productId: it[0], name: it[1], price: it[2], qty: it[3] })),
@@ -217,17 +229,35 @@ async function fetchOrders(initial) {
   }
 }
 
+/** 余剰在庫を整理券番号の小さい注文から順に充当する */
+function allocate(cooking) {
+  const rem = Object.assign({}, surplus);
+  const alloc = {};
+  cooking.slice().sort((a, b) => a.ticket - b.ticket || a.ts - b.ts).forEach(o => {
+    o.items.forEach(it => {
+      const n = Math.min(rem[it.productId] || 0, it.qty);
+      if (n > 0) { (alloc[o.id] = alloc[o.id] || {})[it.productId] = n; rem[it.productId] -= n; }
+    });
+  });
+  return { alloc, rem };
+}
+
 // ---------- 表示 ----------
 function render(freshIds) {
   freshIds = freshIds || [];
   const cooking = orders.filter(o => statusOf(o) === 'waiting');
   const ready = orders.filter(o => statusOf(o) === 'ready');
-  const total = cooking.reduce((a, o) => a + o.items.reduce((b, i) => b + i.qty, 0), 0);
+  const { alloc, rem } = allocate(cooking);
+  const total = cooking.reduce((a, o) => a + o.items.reduce((b, i) =>
+    b + Math.max(0, i.qty - ((alloc[o.id] || {})[i.productId] || 0)), 0), 0);
   $('#head').textContent = '調理待ち ' + cooking.length + '件';
   renderStatus();
 
   const byP = {};
-  cooking.forEach(o => o.items.forEach(i => byP[i.productId] = (byP[i.productId] || 0) + i.qty));
+  cooking.forEach(o => o.items.forEach(i => {
+    const n = Math.max(0, i.qty - ((alloc[o.id] || {})[i.productId] || 0));
+    if (n) byP[i.productId] = (byP[i.productId] || 0) + n;
+  }));
   const ids = (cfg && cfg.products || []).map(p => p.id).filter(id => byP[id])
     .concat(Object.keys(byP).filter(id => !(cfg && cfg.products || []).some(p => p.id === id)));
   $('#totals').innerHTML = total
@@ -235,23 +265,33 @@ function render(freshIds) {
       ids.map(id => `<div class="tchip"><span class="dot" style="background:${esc(colorOf(id))}"></span>
         <span>${esc(nameOf(id, '不明'))}</span><b>${byP[id]}</b><span>個</span></div>`).join('')
     : '';
+  const left = Object.keys(rem).filter(id => rem[id] > 0);
+  $('#surplus').innerHTML = left.length
+    ? '<span class="stitle">余剰在庫（取消分）</span>' + left.map(id =>
+        `<div class="tchip sp"><span class="dot" style="background:${esc(colorOf(id))}"></span>
+          <span>${esc(nameOf(id, '不明'))}</span><b>${rem[id]}</b><span>個</span></div>`).join('')
+    : '';
 
   $('#empty').hidden = !!orders.length;
-  $('#cards').innerHTML = cooking.map((o, idx) => card(o, idx === 0, freshIds.includes(o.id), false)).join('');
+  $('#cards').innerHTML = cooking.map((o, idx) => card(o, idx === 0, freshIds.includes(o.id), false, alloc[o.id] || {})).join('');
   $('#readyHead').hidden = !ready.length;
-  $('#readyCards').innerHTML = ready.map(o => card(o, false, false, true)).join('');
+  $('#readyCards').innerHTML = ready.map(o => card(o, false, false, true, {})).join('');
   tickAges();
 }
 
-function card(o, oldest, fresh, ready) {
+function card(o, oldest, fresh, ready, alloc) {
+  alloc = alloc || {};
   return `<div class="card ${ready ? 'ready' : ''} ${oldest ? 'oldest' : ''} ${fresh ? 'new' : ''}">
     <div class="chead">
       <div class="no">${o.ticket}<small>整理券</small></div>
       ${ready ? '<div class="rtag">準備完了</div>' : '<div class="age" data-ts="' + o.ts + '"></div>'}
     </div>
-    <div class="items">${o.items.map(i => `
-      <div class="item"><span class="dot" style="background:${esc(colorOf(i.productId))}"></span>
-        <span class="nm">${esc(nameOf(i.productId, i.name))}</span><span class="qt">${i.qty}</span></div>`).join('')}</div>
+    <div class="items">${o.items.map(i => {
+      const a = alloc[i.productId] || 0;
+      return `<div class="item"><span class="dot" style="background:${esc(colorOf(i.productId))}"></span>
+        <span class="nm">${esc(nameOf(i.productId, i.name))}${a ? `<div class="stock">${i.qty}個中${a}個は在庫から</div>` : ''}</span>
+        <span class="qt">${Math.max(0, i.qty - a)}</span></div>`;
+    }).join('')}</div>
     <div class="ctime">${hm(o.ts)} 受付</div>
     ${ready
       ? `<button class="btn btn-gray sm block" data-unready="${esc(o.id)}">調理中に戻す</button>`
