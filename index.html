@@ -86,7 +86,19 @@ body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; 
 .item { display: flex; align-items: center; gap: var(--sp-2); font-size: 17px; }
 .item .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .item .nm { flex: 1; min-width: 0; }
-.item .qt { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.item { align-items: center; }
+.item .qt { font-size: 15px; font-weight: 590; color: var(--label-2); font-variant-numeric: tabular-nums;
+  text-align: right; white-space: nowrap; }
+.item .qt b { font-size: 30px; font-weight: 700; color: var(--label); letter-spacing: -0.02em; margin-right: 2px; }
+.item .sub2 { font-size: 13px; color: var(--label-2); }
+.ototal { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--fill); }
+.ototal .lb { font-size: 13px; color: var(--label-2); font-weight: 590; }
+.ototal .vl { font-size: 15px; font-weight: 590; color: var(--label-2); font-variant-numeric: tabular-nums; }
+.ototal .vl b { font-size: 34px; font-weight: 700; color: var(--label); letter-spacing: -0.02em; margin-right: 2px; }
+.card.ready .ototal { background: color-mix(in srgb, var(--green) 18%, transparent); }
+.tchip .pcs { font-size: 13px; color: var(--label-2); }
+.tchip b.big { font-size: 26px; }
 .ctime { font-size: 13px; color: var(--label-2); }
 
 .warn-bar { max-width: 1100px; margin: var(--sp-3) auto 0; padding: var(--sp-3) var(--sp-4);
@@ -158,6 +170,7 @@ let local = {};                         // 送信待ちの状態（id -> status�
 let connOk = null, lastOk = 0, first = true;
 
 const colorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.color : '#8E8E93'; };
+const pcsOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? Number(p.pcs) || 0 : 0; };
 const nameOf = (pid, fallback) => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.name : fallback; };
 const statusOf = o => local[o.id] || o.status;
 
@@ -256,6 +269,8 @@ function render(freshIds) {
   const { alloc, rem } = allocate(cooking);
   const total = cooking.reduce((a, o) => a + o.items.reduce((b, i) =>
     b + Math.max(0, i.qty - ((alloc[o.id] || {})[i.productId] || 0)), 0), 0);
+  const totalPcs = cooking.reduce((a, o) => a + o.items.reduce((b, i) =>
+    b + Math.max(0, i.qty - ((alloc[o.id] || {})[i.productId] || 0)) * pcsOf(i.productId), 0), 0);
   $('#head').textContent = '調理待ち ' + cooking.length + '件';
   const wb = $('#warnBar');
   if (stock && stock.warn) {
@@ -272,15 +287,17 @@ function render(freshIds) {
   const ids = (cfg && cfg.products || []).map(p => p.id).filter(id => byP[id])
     .concat(Object.keys(byP).filter(id => !(cfg && cfg.products || []).some(p => p.id === id)));
   $('#totals').innerHTML = total
-    ? `<div class="tchip all"><span>作る個数</span><b>${total}</b><span>個</span></div>` +
+    ? `<div class="tchip all"><span>作る本数</span><b class="big">${totalPcs}</b><span>本</span><span class="pcs">（${total}個）</span></div>` +
       ids.map(id => `<div class="tchip"><span class="dot" style="background:${esc(colorOf(id))}"></span>
-        <span>${esc(nameOf(id, '不明'))}</span><b>${byP[id]}</b><span>個</span></div>`).join('')
+        <span>${esc(nameOf(id, '不明'))}</span><b class="big">${byP[id] * pcsOf(id)}</b><span>本</span>
+        <span class="pcs">（${byP[id]}個）</span></div>`).join('')
     : '';
   const left = Object.keys(rem).filter(id => rem[id] > 0);
   $('#surplus').innerHTML = left.length
     ? '<span class="stitle">余剰在庫（取消分）</span>' + left.map(id =>
         `<div class="tchip sp"><span class="dot" style="background:${esc(colorOf(id))}"></span>
-          <span>${esc(nameOf(id, '不明'))}</span><b>${rem[id]}</b><span>個</span></div>`).join('')
+          <span>${esc(nameOf(id, '不明'))}</span><b>${rem[id] * pcsOf(id)}</b><span>本</span>
+          <span class="pcs">（${rem[id]}個）</span></div>`).join('')
     : '';
 
   $('#empty').hidden = !!orders.length;
@@ -297,11 +314,14 @@ function card(o, oldest, fresh, ready, alloc) {
       <div class="no">${o.ticket}<small>整理券</small></div>
       ${ready ? '<div class="rtag">準備完了</div>' : '<div class="age" data-ts="' + o.ts + '"></div>'}
     </div>
+    <div class="ototal"><span class="lb">${ready ? '渡す本数' : 'この注文で作る'}</span>
+      <span class="vl"><b>${o.items.reduce((a2, i) => a2 + Math.max(0, i.qty - (alloc[i.productId] || 0)) * pcsOf(i.productId), 0)}</b>本</span></div>
     <div class="items">${o.items.map(i => {
       const a = alloc[i.productId] || 0;
+      const n = Math.max(0, i.qty - a);
       return `<div class="item"><span class="dot" style="background:${esc(colorOf(i.productId))}"></span>
-        <span class="nm">${esc(nameOf(i.productId, i.name))}${a ? `<div class="stock">${i.qty}個中${a}個は在庫から</div>` : ''}</span>
-        <span class="qt">${Math.max(0, i.qty - a)}</span></div>`;
+        <span class="nm">${esc(nameOf(i.productId, i.name))}<div class="sub2">${i.qty}個 × ${pcsOf(i.productId)}本入</div>${a ? `<div class="stock">${i.qty}個中${a}個は在庫から</div>` : ''}</span>
+        <span class="qt"><b>${n * pcsOf(i.productId)}</b>本</span></div>`;
     }).join('')}</div>
     <div class="ctime">${hm(o.ts)} 受付</div>
     ${ready
