@@ -29,8 +29,10 @@
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+button, .tile, .row, .seg button, .tgrid button, .minus { touch-action: manipulation; }
 body { margin: 0; font-family: var(--font); font-size: 17px; line-height: 1.47; color: var(--label);
   background: var(--bg); -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none;
+  touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
   padding-bottom: var(--sp-8); }
 .ic { width: 20px; height: 20px; flex: none; display: block; }
 
@@ -171,6 +173,7 @@ let connOk = null, lastOk = 0, first = true;
 
 const colorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.color : '#8E8E93'; };
 const pcsOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? Number(p.pcs) || 0 : 0; };
+const flavorOf = pid => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? (p.flavor || p.name) : ''; };
 const nameOf = (pid, fallback) => { const p = (cfg && cfg.products || []).find(x => x.id === pid); return p ? p.name : fallback; };
 const statusOf = o => local[o.id] || o.status;
 
@@ -182,8 +185,10 @@ function mark(id, ready) {
   if (ready) {                                     // 充当した余剰在庫を消費する
     const { alloc } = allocate(orders.filter(x => statusOf(x) === 'waiting'));
     const a = alloc[id] || {};
-    use = Object.keys(a).map(pid => ({ productId: pid, qty: a[pid] }));
-    Object.keys(a).forEach(pid => { surplus[pid] = Math.max(0, (surplus[pid] || 0) - a[pid]); });
+    const byFlavor = {};
+    Object.keys(a).forEach(pid => { const f = flavorOf(pid); byFlavor[f] = (byFlavor[f] || 0) + a[pid]; });
+    use = Object.keys(byFlavor).map(f => ({ flavor: f, pieces: byFlavor[f] }));
+    Object.keys(byFlavor).forEach(f => { surplus[f] = Math.max(0, (surplus[f] || 0) - byFlavor[f]); });
   }
   local[id] = ready ? 'ready' : 'waiting';
   queue = queue.filter(e => e.id !== id);
@@ -248,14 +253,17 @@ async function fetchOrders(initial) {
   }
 }
 
-/** 余剰在庫を整理券番号の小さい注文から順に充当する */
+/** 余剰在庫（味ごとの本数）を整理券番号の小さい注文から順に充当する。
+ *  alloc[orderId][productId] = 充当した本数 */
 function allocate(cooking) {
   const rem = Object.assign({}, surplus);
   const alloc = {};
   cooking.slice().sort((a, b) => a.ticket - b.ticket || a.ts - b.ts).forEach(o => {
     o.items.forEach(it => {
-      const n = Math.min(rem[it.productId] || 0, it.qty);
-      if (n > 0) { (alloc[o.id] = alloc[o.id] || {})[it.productId] = n; rem[it.productId] -= n; }
+      const f = flavorOf(it.productId);
+      const need = pcsOf(it.productId) * it.qty;
+      const n = Math.min(rem[f] || 0, need);
+      if (n > 0) { (alloc[o.id] = alloc[o.id] || {})[it.productId] = n; rem[f] -= n; }
     });
   });
   return { alloc, rem };
@@ -267,10 +275,9 @@ function render(freshIds) {
   const cooking = orders.filter(o => statusOf(o) === 'waiting');
   const ready = orders.filter(o => statusOf(o) === 'ready');
   const { alloc, rem } = allocate(cooking);
-  const total = cooking.reduce((a, o) => a + o.items.reduce((b, i) =>
-    b + Math.max(0, i.qty - ((alloc[o.id] || {})[i.productId] || 0)), 0), 0);
-  const totalPcs = cooking.reduce((a, o) => a + o.items.reduce((b, i) =>
-    b + Math.max(0, i.qty - ((alloc[o.id] || {})[i.productId] || 0)) * pcsOf(i.productId), 0), 0);
+  const need = (o, i) => Math.max(0, pcsOf(i.productId) * i.qty - ((alloc[o.id] || {})[i.productId] || 0));
+  const total = cooking.reduce((a, o) => a + o.items.reduce((b, i) => b + i.qty, 0), 0);
+  const totalPcs = cooking.reduce((a, o) => a + o.items.reduce((b, i) => b + need(o, i), 0), 0);
   $('#head').textContent = '調理待ち ' + cooking.length + '件';
   const wb = $('#warnBar');
   if (stock && stock.warn) {
@@ -279,9 +286,9 @@ function render(freshIds) {
   } else wb.hidden = true;
   renderStatus();
 
-  const byP = {};
+  const byP = {};                       // productId -> 作る本数
   cooking.forEach(o => o.items.forEach(i => {
-    const n = Math.max(0, i.qty - ((alloc[o.id] || {})[i.productId] || 0));
+    const n = need(o, i);
     if (n) byP[i.productId] = (byP[i.productId] || 0) + n;
   }));
   const ids = (cfg && cfg.products || []).map(p => p.id).filter(id => byP[id])
@@ -289,15 +296,12 @@ function render(freshIds) {
   $('#totals').innerHTML = total
     ? `<div class="tchip all"><span>作る本数</span><b class="big">${totalPcs}</b><span>本</span><span class="pcs">（${total}個）</span></div>` +
       ids.map(id => `<div class="tchip"><span class="dot" style="background:${esc(colorOf(id))}"></span>
-        <span>${esc(nameOf(id, '不明'))}</span><b class="big">${byP[id] * pcsOf(id)}</b><span>本</span>
-        <span class="pcs">（${byP[id]}個）</span></div>`).join('')
+        <span>${esc(nameOf(id, '不明'))}</span><b class="big">${byP[id]}</b><span>本</span></div>`).join('')
     : '';
-  const left = Object.keys(rem).filter(id => rem[id] > 0);
+  const left = Object.keys(rem).filter(f => rem[f] > 0);
   $('#surplus').innerHTML = left.length
-    ? '<span class="stitle">余剰在庫（取消分）</span>' + left.map(id =>
-        `<div class="tchip sp"><span class="dot" style="background:${esc(colorOf(id))}"></span>
-          <span>${esc(nameOf(id, '不明'))}</span><b>${rem[id] * pcsOf(id)}</b><span>本</span>
-          <span class="pcs">（${rem[id]}個）</span></div>`).join('')
+    ? '<span class="stitle">余剰在庫（取消分）</span>' + left.map(f =>
+        `<div class="tchip sp"><span>${esc(f)}</span><b>${rem[f]}</b><span>本</span></div>`).join('')
     : '';
 
   $('#empty').hidden = !!orders.length;
@@ -315,13 +319,13 @@ function card(o, oldest, fresh, ready, alloc) {
       ${ready ? '<div class="rtag">準備完了</div>' : '<div class="age" data-ts="' + o.ts + '"></div>'}
     </div>
     <div class="ototal"><span class="lb">${ready ? '渡す本数' : 'この注文で作る'}</span>
-      <span class="vl"><b>${o.items.reduce((a2, i) => a2 + Math.max(0, i.qty - (alloc[i.productId] || 0)) * pcsOf(i.productId), 0)}</b>本</span></div>
+      <span class="vl"><b>${o.items.reduce((a2, i) => a2 + Math.max(0, pcsOf(i.productId) * i.qty - (alloc[i.productId] || 0)), 0)}</b>本</span></div>
     <div class="items">${o.items.map(i => {
-      const a = alloc[i.productId] || 0;
-      const n = Math.max(0, i.qty - a);
+      const full = pcsOf(i.productId) * i.qty;
+      const a = Math.min(full, alloc[i.productId] || 0);
       return `<div class="item"><span class="dot" style="background:${esc(colorOf(i.productId))}"></span>
-        <span class="nm">${esc(nameOf(i.productId, i.name))}<div class="sub2">${i.qty}個 × ${pcsOf(i.productId)}本入</div>${a ? `<div class="stock">${i.qty}個中${a}個は在庫から</div>` : ''}</span>
-        <span class="qt"><b>${n * pcsOf(i.productId)}</b>本</span></div>`;
+        <span class="nm">${esc(nameOf(i.productId, i.name))}<div class="sub2">${i.qty}個 × ${pcsOf(i.productId)}本入</div>${a ? `<div class="stock">${full}本中${a}本は在庫から</div>` : ''}</span>
+        <span class="qt"><b>${full - a}</b>本</span></div>`;
     }).join('')}</div>
     <div class="ctime">${hm(o.ts)} 受付</div>
     ${ready
@@ -384,6 +388,9 @@ $('#soundBtn').addEventListener('click', () => {
   $('#soundBtn').setAttribute('aria-pressed', sound);
   if (sound) beep(0);  // iOSのため、ユーザー操作の中で一度鳴らして音声を有効化する
 });
+document.addEventListener('dblclick', e => e.preventDefault());
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('gesturechange', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { fetchOrders(false); flush(); } });
 
 $('#soundBtn').setAttribute('aria-pressed', sound);
